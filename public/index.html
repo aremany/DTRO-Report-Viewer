@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>전력관제 장애보고서 뷰어</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+
+        .header-container {
+            text-align: center;
+            margin-bottom: 30px;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .logo-img {
+            max-height: 80px;
+            margin-bottom: 15px;
+        }
+
+        .search-container {
+            max-width: 800px;
+            margin: 0 auto 30px auto;
+        }
+
+        .table-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            display: none;
+        }
+
+        .clickable-row {
+            cursor: pointer;
+        }
+
+        .clickable-row:hover {
+            background-color: #f1f1f1;
+        }
+
+        .modal-header {
+            background-color: #343a40;
+            color: white;
+        }
+
+        .risk-high {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .risk-medium {
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .risk-low {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        /* 모달 테이블 셀 줄바꿈 처리 */
+        #detailModal td {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        /* 인쇄 스타일 */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+
+            #detailModal,
+            #detailModal * {
+                visibility: visible;
+            }
+
+            #detailModal .modal-dialog {
+                position: absolute;
+                left: 0;
+                top: 0;
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                max-width: 100%;
+            }
+
+            #detailModal .modal-header,
+            #detailModal .modal-footer {
+                display: none !important;
+            }
+
+            #detailModal .modal-content {
+                border: none;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- 헤더 & 로고 -->
+        <div class="header-container">
+            <img src="io.png" alt="Logo" class="logo-img" onerror="this.style.display='none'">
+            <h2 class="mt-2">장애보고서 호출기</h2>
+            <p class="text-muted">과거 장애 이력을 검색하고 상세 내용을 확인하세요.</p>
+        </div>
+
+        <!-- 검색창 -->
+        <div class="search-container">
+            <div class="input-group input-group-lg">
+                <input type="text" id="searchInput" class="form-control" placeholder="검색어 입력 (스페이스바로 구분하여 AND 검색)">
+                <div class="input-group-append">
+                    <button class="btn btn-primary" type="button" id="searchBtn">검색</button>
+                </div>
+            </div>
+            <small class="form-text text-muted text-center mt-2">
+                팁: 스페이스바를 누르면 전체 목록이 표시됩니다.
+            </small>
+        </div>
+
+        <!-- 결과 테이블 -->
+        <div class="table-container" id="resultContainer">
+            <h5 class="mb-3">검색 결과: <span id="resultCount">0</span>건</h5>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="thead-light">
+                        <tr>
+                            <th data-sort="id" data-label="순번">순번</th>
+                            <th data-sort="fault_datetime" data-label="장애일시">장애일시 ▼</th>
+                            <th data-sort="fault_type" data-label="장애명">장애명</th>
+                            <th data-sort="location" data-label="장애 장소">장애 장소</th>
+                            <th data-sort="cause" data-label="장애 원인">장애 원인</th>
+                            <th data-sort="risk_level" data-label="Risk">Risk</th>
+                        </tr>
+                    </thead>
+                    <tbody id="faultsTableBody">
+                        <!-- 데이터가 여기에 들어갑니다 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상세 정보 모달 -->
+    <div class="modal fade" id="detailModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">장애 상세 정보</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <table class="table table-bordered">
+                        <tbody>
+                            <tr>
+                                <th style="width: 20%;" class="bg-light">장애명</th>
+                                <td id="modalFaultType"></td>
+                            </tr>
+                            <tr>
+                                <th class="bg-light">발생일시</th>
+                                <td id="modalDateTime"></td>
+                            </tr>
+                            <tr>
+                                <th class="bg-light">장소</th>
+                                <td id="modalLocation"></td>
+                            </tr>
+                            <tr>
+                                <th class="bg-light">원인</th>
+                                <td id="modalCause"></td>
+                            </tr>
+                            <tr>
+                                <th class="bg-light">현상</th>
+                                <td id="modalSymptom"></td>
+                            </tr>
+                            <tr>
+                                <th class="bg-light">조치방법</th>
+                                <td id="modalAction"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="card mt-3">
+                        <div class="card-header bg-light font-weight-bold">
+                            원본 텍스트
+                        </div>
+                        <div class="card-body">
+                            <pre id="modalRawText"
+                                style="white-space: pre-wrap; background-color: #f8f9fa; padding: 10px; border-radius: 5px;"></pre>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="printReport()">🖨️ 인쇄</button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">닫기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+    <script>
+        let allFaults = [];
+        let currentSort = { column: 'fault_datetime', order: 'desc' };
+
+        // 페이지 로드 시 전체 데이터 가져오기
+        window.onload = async function () {
+            try {
+                const res = await fetch('/api/faults');
+                allFaults = await res.json();
+                console.log(`Loaded ${allFaults.length} faults.`);
+
+                // 헤더에 클릭 이벤트 추가
+                document.querySelectorAll('th[data-sort]').forEach(th => {
+                    th.style.cursor = 'pointer';
+                    th.addEventListener('click', () => {
+                        const column = th.dataset.sort;
+                        handleSort(column);
+                    });
+                });
+            } catch (e) {
+                console.error('Data load failed:', e);
+                alert('데이터 로드 실패: ' + e);
+            }
+        };
+
+        // 정렬 처리
+        function handleSort(column) {
+            if (currentSort.column === column) {
+                currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                currentSort.order = 'desc';
+            }
+            updateSortUI();
+            performSearch();
+        }
+
+        function updateSortUI() {
+            document.querySelectorAll('th[data-sort]').forEach(th => {
+                th.innerHTML = th.dataset.label;
+                if (th.dataset.sort === currentSort.column) {
+                    const arrow = currentSort.order === 'asc' ? ' ▲' : ' ▼';
+                    th.innerHTML += arrow;
+                }
+            });
+        }
+
+        // 검색 로직
+        function performSearch() {
+            const input = document.getElementById('searchInput').value;
+            let results = [];
+
+            // 완전히 빈 문자열: 숨김, 공백만: 전체 표시
+            if (input === '') {
+                results = [];
+            } else if (input.trim() === '') {
+                // 공백만 입력된 경우 전체 리스트 표시
+                results = [...allFaults];
+            } else {
+                const keywords = input.trim().split(/\s+/).filter(k => k.length > 0);
+                results = allFaults.filter(fault => {
+                    const target = (fault.fault_type || '').toLowerCase();
+                    return keywords.every(k => target.includes(k.toLowerCase()));
+                });
+            }
+
+            // 정렬
+            results.sort((a, b) => {
+                let valA = a[currentSort.column] || '';
+                let valB = b[currentSort.column] || '';
+
+                if (currentSort.column === 'id') {
+                    valA = parseInt(valA);
+                    valB = parseInt(valB);
+                }
+
+                if (valA < valB) return currentSort.order === 'asc' ? -1 : 1;
+                if (valA > valB) return currentSort.order === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            renderTable(results);
+        }
+
+        // 테이블 렌더링
+        function renderTable(data) {
+            const tbody = document.getElementById('faultsTableBody');
+            const container = document.getElementById('resultContainer');
+            const countSpan = document.getElementById('resultCount');
+
+            tbody.innerHTML = '';
+            countSpan.textContent = data.length;
+
+            if (data.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+
+            data.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = 'clickable-row';
+                tr.onclick = () => showDetail(item.id);
+
+                let riskClass = '';
+                if (item.risk_level === 'High') riskClass = 'risk-high';
+                else if (item.risk_level === 'Medium') riskClass = 'risk-medium';
+                else if (item.risk_level === 'Low') riskClass = 'risk-low';
+
+                tr.innerHTML = `
+                    <td>${item.id}</td>
+                    <td>${item.fault_datetime}</td>
+                    <td class="font-weight-bold">${item.fault_type}</td>
+                    <td>${item.location || '-'}</td>
+                    <td>${item.cause || '-'}</td>
+                    <td class="${riskClass}">${item.risk_level || '-'}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 상세 정보 보기
+        async function showDetail(id) {
+            try {
+                const res = await fetch(`/api/faults/${id}`);
+                if (!res.ok) throw new Error('상세 정보 로드 실패');
+
+                const data = await res.json();
+
+                document.getElementById('modalTitle').textContent = `[${data.id}] ${data.fault_type}`;
+                document.getElementById('modalFaultType').innerHTML = data.fault_type || '-';
+                document.getElementById('modalDateTime').innerHTML = data.fault_datetime || '-';
+                document.getElementById('modalLocation').innerHTML = (data.location || '-').replace(/\n/g, '<br>');
+                document.getElementById('modalCause').innerHTML = (data.cause || '-').replace(/\n/g, '<br>');
+                document.getElementById('modalSymptom').innerHTML = (data.symptom || '-').replace(/\n/g, '<br>');
+                document.getElementById('modalAction').innerHTML = (data.action || '-').replace(/\n/g, '<br>');
+                document.getElementById('modalRawText').textContent = data.raw_text || '원본 텍스트 없음';
+
+                $('#detailModal').modal('show');
+            } catch (e) {
+                alert('오류: ' + e);
+            }
+        }
+
+        // 인쇄 함수
+        function printReport() {
+            window.print();
+        }
+
+        // 이벤트 리스너
+        document.getElementById('searchBtn').addEventListener('click', performSearch);
+        document.getElementById('searchInput').addEventListener('input', performSearch);
+    </script>
+</body>
+
+</html>

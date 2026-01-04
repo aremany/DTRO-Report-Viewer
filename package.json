@@ -1,0 +1,13 @@
+{
+    "name": "independent-report-viewer",
+    "version": "1.0.0",
+    "description": "독립형 장애보고서 호출기",
+    "main": "app.js",
+    "scripts": {
+        "start": "node app.js"
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "sqlite3": "^5.1.6"
+    }
+}
